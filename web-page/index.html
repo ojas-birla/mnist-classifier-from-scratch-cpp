@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNIST Digital Drawing Pad Engine</title>
+    <style>
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            text-align: center; 
+            background: #121212; 
+            color: white; 
+            margin: 0;
+            padding: 20px;
+        }
+        h2 { margin-bottom: 5px; color: #ffffff; }
+        .subtitle { color: #aaa; font-size: 14px; margin-bottom: 25px; }
+        
+        .container {
+            display: flex;
+            justify-content: center;
+            margin: 0 auto;
+            max-width: 500px;
+        }
+        
+        .card {
+            background: #1e1e1e;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #2d2d2d;
+            width: 100%;
+        }
+
+        #drawing-pad { 
+            border: 2px dashed #00ff00; 
+            background: #000; 
+            cursor: crosshair; 
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
+        }
+
+        #clear-btn { 
+            margin-top: 20px; 
+            padding: 12px 30px; 
+            background: #ff3333; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            cursor: pointer;
+            font-size: 15px;
+            transition: background 0.2s;
+        }
+        #clear-btn:hover { background: #cc2424; }
+        
+        #result-container {
+            margin: 20px auto;
+            background: #1a2e1a;
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            padding: 15px;
+            max-width: 440px;
+        }
+        #result { font-size: 24px; font-weight: bold; color: #00ff00; }
+        
+        #debug-container { margin-top: 25px; }
+        #debug-canvas { 
+            border: 2px solid #555; 
+            border-radius: 4px;
+            image-rendering: pixelated; 
+            width: 84px; 
+            height: 84px; 
+            background: black;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>MNIST Classifier Engine</h2>
+    <div class="subtitle">-Ojas Birla</div>
+    
+    <div id="result-container">
+        <div id="result">Loading Neural Network Weights...</div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <canvas id="drawing-pad" width="280" height="280"></canvas>
+            <button id="clear-btn">Clear Canvas</button>
+        </div>
+    </div>
+
+    <div id="debug-container">
+        <div style="font-size: 13px; color: #aaa;">Engine Input (Centered 28x28 Feed):</div>
+        <canvas id="debug-canvas" width="28" height="28"></canvas>
+    </div>
+
+    <script>
+        let modelWeights = null;
+
+        const drawCanvas = document.getElementById('drawing-pad');
+        const drawCtx = drawCanvas.getContext('2d');
+        const clearBtn = document.getElementById('clear-btn');
+        let isDrawing = false;
+
+        drawCtx.strokeStyle = "white";
+        drawCtx.lineWidth = 22;
+        drawCtx.lineCap = "round";
+        drawCtx.lineJoin = "round";
+        
+        clearDrawingPad();
+
+        fetch('weights.json')
+            .then(res => res.json())
+            .then(data => {
+                modelWeights = data;
+                document.getElementById('result').innerText = "Draw a single digit (0-9)...";
+            })
+            .catch(err => {
+                document.getElementById('result').innerText = "Error loading weights.json";
+                console.error(err);
+            });
+
+        function relu(arr) {
+            return arr.map(v => Math.max(0, v));
+        }
+
+        function dotProduct(input, weightsMatrix, biasRow) {
+            let numOutputs = weightsMatrix[0].length;
+            let output = new Array(numOutputs).fill(0);
+            for (let j = 0; j < numOutputs; j++) {
+                let sum = 0;
+                for (let i = 0; i < input.length; i++) {
+                    sum += input[i] * weightsMatrix[i][j];
+                }
+                output[j] = sum + biasRow[j];
+            }
+            return output;
+        }
+
+        function softmax(arr) {
+            let max = Math.max(...arr); 
+            let exps = arr.map(v => Math.exp(v - max));
+            let sum = exps.reduce((a, b) => a + b, 0);
+            return exps.map(v => v / sum);
+        }
+
+        function runInference(X_input) {
+            if (!modelWeights) return;
+
+            let z1 = dotProduct(X_input, modelWeights.W1, modelWeights.b1);
+            let a1 = relu(z1);
+
+            let z2 = dotProduct(a1, modelWeights.W2, modelWeights.b2);
+            let probs = softmax(z2);
+
+            let maxProb = Math.max(...probs);
+            let predictedDigit = probs.indexOf(maxProb);
+
+            document.getElementById('result').innerText = `Prediction: ${predictedDigit} (${Math.round(maxProb * 100)}%)`;
+        }
+
+        drawCanvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
+        drawCanvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', () => { isDrawing = false; drawCtx.beginPath(); });
+
+        drawCanvas.addEventListener('touchstart', (e) => { isDrawing = true; draw(e.touches[0]); e.preventDefault(); });
+        drawCanvas.addEventListener('touchmove', (e) => { draw(e.touches[0]); e.preventDefault(); });
+        window.addEventListener('touchend', () => { isDrawing = false; drawCtx.beginPath(); });
+
+        clearBtn.addEventListener('click', clearDrawingPad);
+
+        function clearDrawingPad() {
+            drawCtx.fillStyle = "black";
+            drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            const debugCanvas = document.getElementById('debug-canvas');
+            const debugCtx = debugCanvas.getContext('2d');
+            debugCtx.fillStyle = "black";
+            debugCtx.fillRect(0, 0, 28, 28);
+
+            if (modelWeights) document.getElementById('result').innerText = "Draw a digit (0-9)";
+        }
+
+        function draw(e) {
+            if (!isDrawing || !modelWeights) return;
+            
+            const rect = drawCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            drawCtx.lineTo(x, y);
+            drawCtx.stroke();
+            drawCtx.beginPath();
+            drawCtx.moveTo(x, y);
+            
+            processDrawingPadFrame();
+        }
+
+        function processDrawingPadFrame() {
+            const debugCanvas = document.getElementById('debug-canvas');
+            const debugCtx = debugCanvas.getContext('2d', { willReadFrequently: true });
+            
+            debugCtx.fillStyle = "black";
+            debugCtx.fillRect(0, 0, 28, 28);
+            debugCtx.drawImage(drawCanvas, 0, 0, 280, 280, 0, 0, 28, 28);
+            
+            let imgData = debugCtx.getImageData(0, 0, 28, 28);
+            let pixels = imgData.data;
+            
+            let rawGrid = new Array(28).fill(0).map(() => new Array(28).fill(0));
+            let sumX = 0, sumY = 0, numFilledPixels = 0;
+            
+            for (let i = 0; i < pixels.length; i += 4) {
+                let pixelIdx = i / 4;
+                let r = Math.floor(pixelIdx / 28);
+                let c = pixelIdx % 28;
+                let val = pixels[i] > 50 ? 1.0 : 0.0;
+                
+                rawGrid[r][c] = val;
+                if (val === 1.0) { sumX += c; sumY += r; numFilledPixels++; }
+            }
+            
+            let X_input = new Array(784).fill(0);
+            if (numFilledPixels > 0) {
+                let centerX = Math.round(sumX / numFilledPixels);
+                let centerY = Math.round(sumY / numFilledPixels);
+                let shiftX = 14 - centerX;
+                let shiftY = 14 - centerY;
+
+                for (let r = 0; r < 28; r++) {
+                    for (let c = 0; c < 28; c++) {
+                        if (rawGrid[r][c] === 1.0) {
+                            let newR = r + shiftY;
+                            let newC = c + shiftX;
+                            if (newR >= 0 && newR < 28 && newC >= 0 && newC < 28) {
+                                X_input[newR * 28 + newC] = 1.0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let r = 0; r < 28; r++) {
+                for (let c = 0; c < 28; c++) {
+                    let idx = (r * 28 + c) * 4;
+                    let colorValue = X_input[r * 28 + c] === 1.0 ? 255 : 0;
+                    pixels[idx] = colorValue; 
+                    pixels[idx+1] = colorValue; 
+                    pixels[idx+2] = colorValue; 
+                    pixels[idx+3] = 255;
+                }
+            }
+            debugCtx.putImageData(imgData, 0, 0);
+            
+            if (numFilledPixels > 5) { 
+                runInference(X_input); 
+            }
+        }
+    </script>
+</body>
+</html>
