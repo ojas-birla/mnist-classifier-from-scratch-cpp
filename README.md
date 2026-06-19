@@ -4,10 +4,8 @@
 
 A feedforward neural network for handwritten digit recognition, implemented entirely from scratch in C++ (no ML libraries - Matrix operations writen from scrach, forward/backward propagation, and Gradient Descent). The trained weights are exported to JSON and run client-side in the browser, where you can draw a digit and get a live prediction.
 
-**[Try the live demo →](#)** *link*.\
+**[Try the live demo →](#)** *[link](https://ojas-birla.github.io/mnist-classifier-from-scratch-cpp/)*.\
 [Read the full technical blog: How main.cpp works](blog-main-cpp.md)
-
--Ojas Birla
 
 ---
 
@@ -110,7 +108,7 @@ This reads the four `.txt` weight files and writes `./web-page/weights.json`.
 Serve the folder containing `index.html` and `weights.json` with any static file server (it won't work via `file://` due to the `fetch()` call):
 
 ```bash
-cd web-page
+cd docs
 python -m http.server 8000
 ```
 
