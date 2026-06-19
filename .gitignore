@@ -1,0 +1,24 @@
+# --- C++ build artifacts ---
+*.o
+*.obj
+*.out
+*.exe
+train
+a.out
+*.exe~
+*.app
+*.ilk
+*.pdb
+
+# --- Build directories ---
+build/
+cmake-build-*/
+*.dSYM/
+
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
